@@ -70,12 +70,6 @@ function(TiqiCommon_EncodeURI inputString outputVariable)
 	set(${outputVariable} ${result} PARENT_SCOPE)
 endfunction()
 
-# download methods:
-# ARTIFACT_PATHNAME given: download artifact file, not given: download zip with all files
-# CI_JOB_ID given:
-# - CI_JOB_NAME and GIT_REF not allowed
-# CI_JOB_ID not given:
-# - CI_JOB_NAME and GIT_REF required
 function(TiqiCommon_GitlabArtifactURL outputVariable)
 	set(oneValueArgs
 		GITLAB_HOST
@@ -99,13 +93,34 @@ function(TiqiCommon_GitlabArtifactURL outputVariable)
 		if(NOT ARG_CI_JOB_NAME OR NOT ARG_GIT_REF)
 			message(FATAL_ERROR "Gitlab artifact download requires both a job name and a Git ref if no job ID is given.")
 		endif()
+
+		TiqiCommon_EncodeURI(${ARG_CI_JOB_NAME} jobNameEncoded)
+		TiqiCommon_EncodeURI(${ARG_GIT_REF} refEncoded)
 	else()
 		if(ARG_CI_JOB_NAME OR ARG_GIT_REF)
 			message(FATAL_ERROR "Gitlab artifact download by job ID does not allow a job name or a Git ref.")
 		endif()
+
+		TiqiCommon_EncodeURI(${ARG_CI_JOB_ID} jobIdEncoded)
 	endif()
 
-	# continue implementing
+	if(ARG_ARTIFACT_PATHNAME)
+		TiqiCommon_EncodeURI(${ARG_ARTIFACT_PATHNAME} pathnameEncoded)
+	endif()
 
+	TiqiCommon_EncodeURI(${ARG_GITLAB_PROJECT} projectEncoded)
+
+	# four different methods to download artifacts (https://docs.gitlab.com/ee/api/job_artifacts.html)
+	if(ARG_ARTIFACT_PATHNAME AND ARG_CI_JOB_ID)
+		set(downloadURI "projects/${projectEncoded}/jobs/${jobIdEncoded}/artifacts/${pathnameEncoded}")
+	elseif(ARG_ARTIFACT_PATHNAME AND NOT ARG_CI_JOB_ID)
+		set(downloadURI "projects/${projectEncoded}/jobs/artifacts/${refEncoded}/raw/${pathnameEncoded}?job=${jobNameEncoded}")
+	elseif(NOT ARG_ARTIFACT_PATHNAME AND ARG_CI_JOB_ID)
+		set(downloadURI "projects/${projectEncoded}/jobs/${jobIdEncoded}/artifacts")
+	elseif(NOT ARG_ARTIFACT_PATHNAME AND NOT ARG_CI_JOB_ID)
+		set(downloadURI "projects/${projectEncoded}/jobs/artifacts/${refEncoded}/download?job=${jobNameEncoded}")
+	endif()
+
+	set(${outputVariable} "https://${ARG_GITLAB_HOST}/api/v4/${downloadURI}" PARENT_SCOPE)
 endfunction()
 

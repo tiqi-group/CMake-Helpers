@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.7)
 
-function(TiqiCommon_ExportGitlabToken)
+function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 	set(oneValueArgs
 		GITLAB_HOST
 	)
-	cmake_parse_arguments(PARSE_ARGV 0 ARG "" "${oneValueArgs}" "")
+	cmake_parse_arguments(PARSE_ARGV 1 ARG "" "${oneValueArgs}" "")
 
 	if(NOT ARG_GITLAB_HOST)
 		set(ARG_GITLAB_HOST "gitlab.phys.ethz.ch")
@@ -52,8 +52,60 @@ function(TiqiCommon_ExportGitlabToken)
 	endif()
 
 	get_property(propertyValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
-	set(GITLAB_PRIVATE_TOKEN ${propertyValue} PARENT_SCOPE)
-	set(GITLAB_PRIVATE_TOKEN_HEADER "PRIVATE-TOKEN: ${propertyValue}" PARENT_SCOPE)
+	set(${outputVariable} "PRIVATE-TOKEN: ${propertyValue}" PARENT_SCOPE)
 endfunction()
 
+function(TiqiCommon_EncodeURI inputString outputVariable)
+	string(HEX ${inputString} hex)
+	string(LENGTH "${hex}" length)
+	math(EXPR last "${length} - 1")
+	set(result "")
+	foreach(i RANGE ${last})
+		math(EXPR even "${i} % 2")
+		if("${even}" STREQUAL "0")
+			string(SUBSTRING "${hex}" "${i}" 2 char)
+			string(APPEND result "%${char}")
+		endif()
+	endforeach()
+	set(${outputVariable} ${result} PARENT_SCOPE)
+endfunction()
+
+# download methods:
+# ARTIFACT_PATHNAME given: download artifact file, not given: download zip with all files
+# CI_JOB_ID given:
+# - CI_JOB_NAME and GIT_REF not allowed
+# CI_JOB_ID not given:
+# - CI_JOB_NAME and GIT_REF required
+function(TiqiCommon_GitlabArtifactURL outputVariable)
+	set(oneValueArgs
+		GITLAB_HOST
+		GITLAB_PROJECT
+		ARTIFACT_PATHNAME
+		CI_JOB_ID
+		CI_JOB_NAME
+		GIT_REF
+	)
+	cmake_parse_arguments(PARSE_ARGV 1 ARG "" "${oneValueArgs}" "")
+
+	if(NOT ARG_GITLAB_HOST)
+		set(ARG_GITLAB_HOST "gitlab.phys.ethz.ch")
+	endif()
+
+	if(NOT ARG_GITLAB_PROJECT)
+		message(FATAL_ERROR "Gitlab artifact download requires either a project ID or a project name.")
+	endif()
+
+	if(NOT ARG_CI_JOB_ID)
+		if(NOT ARG_CI_JOB_NAME OR NOT ARG_GIT_REF)
+			message(FATAL_ERROR "Gitlab artifact download requires both a job name and a Git ref if no job ID is given.")
+		endif()
+	else()
+		if(ARG_CI_JOB_NAME OR ARG_GIT_REF)
+			message(FATAL_ERROR "Gitlab artifact download by job ID does not allow a job name or a Git ref.")
+		endif()
+	endif()
+
+	# continue implementing
+
+endfunction()
 

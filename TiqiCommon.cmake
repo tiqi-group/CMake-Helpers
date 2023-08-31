@@ -1,4 +1,4 @@
-# Distributed under the MIT License.  See accompanying file Copyright.txt.
+# Distributed under the MIT License. See accompanying file LICENSE.
 
 #[=======================================================================[.rst:
 TiqiCommon

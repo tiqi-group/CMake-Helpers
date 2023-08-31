@@ -118,7 +118,7 @@ This complete example shows how to download an artifact archive with embedded Ma
   # download and include TiqiCommon module
   FetchContent_Declare(
     tiqi_common
-    GIT_REPOSITORY https://gitlab.ethz.ch/michaeny/test.git
+    GIT_REPOSITORY https://github.com/tiqi-group/CMake-Helpers.git
     GIT_TAG main
   )
   FetchContent_MakeAvailable(tiqi_common)

@@ -1,6 +1,5 @@
-# Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
-# file Copyright.txt or https://cmake.org/licensing for details.
-    
+# Distributed under the MIT License.  See accompanying file Copyright.txt.
+
 #[=======================================================================[.rst:
 TiqiCommon
 ------------------
@@ -23,9 +22,9 @@ The following shows a typical example of obtaining a GitLab authentication heade
   TiqiCommon_GitlabAuthenticationHeader(auth_header)
 
   TiqiCommon_GitlabArtifactURL(artifact_fetch_url
-        "tiqi-projects/my-project"
-        CI_JOB_NAME "build"
-        GIT_REF "main"
+    "tiqi-projects/my-project"
+    CI_JOB_NAME "build"
+    GIT_REF "main"
   )
 
   FetchContent_Declare(
@@ -105,19 +104,63 @@ Commands
 Examples
 ^^^^^^^^
 
-Download Compressed Sources from the Main-Branch
-""""""""""""""""""""""""""""""""""""""""""""""""
+Library Sources with Linking
+""""""""""""""""""""""""""""
+
+This complete example shows how to download an artifact archive with embedded Makefile, how to build the contained library and link it to an executable. The artifact is downloaded for the project with ID 1786 and the CI job with ID 26500.
+
+.. note:: The use of both the :module:`FetchContent` and :module:`ExternalProject` modules in this example is intended: As the GitLab authentication token might only be available during the configuration stage (might expire afterwards), it is recommended to download the library sources during the configuration stage.
 
 .. code-block:: cmake
+  include(FetchContent)
+  include(ExternalProject)
   
-
-
-Usage
------
-
-This module provides helper functions to streamline interactions with GitLab in CMake workflows. The main utilities provided are for creating authentication headers and assembling artifact download URLs. The user must take care to only use the intended public functions and not internal utility functions.
-
-Note: Ensure that this module is included in your CMake project before calling any of its functions.
+  # download and include TiqiCommon module
+  FetchContent_Declare(
+    tiqi_common
+    GIT_REPOSITORY https://gitlab.ethz.ch/michaeny/test.git
+    GIT_TAG main
+  )
+  FetchContent_MakeAvailable(tiqi_common)
+  include(${tiqi_common_SOURCE_DIR}/TiqiCommon.cmake)
+  
+  # prepare authentication header and artifact download URL
+  TiqiCommon_GitlabAuthenticationHeader(auth_header)
+  TiqiCommon_GitlabArtifactURL(artifact_fetch_url
+    "1786"
+    CI_JOB_ID 26500
+    ARTIFACT_PATHNAME build/bsp.tar.gz
+  )
+  
+  # download source archive including Makefile
+  FetchContent_Declare(
+    my_sources
+    URL ${artifact_fetch_url}
+    HTTP_HEADER ${auth_header}
+  )
+  FetchContent_MakeAvailable(my_sources)
+  
+  # define external project to build libraries
+  ExternalProject_Add(my_library_external
+          SOURCE_DIR ${my_sources_SOURCE_DIR}
+          CONFIGURE_COMMAND ""
+          BUILD_IN_SOURCE TRUE
+          BUILD_COMMAND make
+          INSTALL_COMMAND ""
+          BUILD_BYPRODUCTS <SOURCE_DIR>/lib/my_lib.a
+  )
+  
+  # define library as cmake interface target
+  add_library(my_library INTERFACE)
+  add_dependencies(my_library my_library_external)
+  ExternalProject_Get_Property(my_library_external SOURCE_DIR)
+  target_include_directories(my_library INTERFACE ${SOURCE_DIR}/include)
+  target_link_directories(my_library INTERFACE ${SOURCE_DIR}/lib)
+  target_link_libraries(my_library INTERFACE-lmy_lib)
+  
+  # define main executable and link my_library
+  add_executable(${PROJECT_NAME} main.cpp)
+  target_link_libraries(${PROJECT_NAME} my_library)
 #]=======================================================================]
 
 #=======================================================================

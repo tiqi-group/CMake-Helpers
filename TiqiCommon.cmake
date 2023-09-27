@@ -209,7 +209,7 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 
 		if(DEFINED ENV{CI_JOB_TOKEN})
 			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
-			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" $ENV{CI_JOB_TOKEN})
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" "JOB-TOKEN: $ENV{CI_JOB_TOKEN}")
 		else()
 			set(gitlabHost ${ARG_GITLAB_HOST})
 
@@ -241,12 +241,12 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 			endif()
 
 			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
-			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" ${_TIQI_COMMON_GITLAB_TOKEN})
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" "PRIVATE-TOKEN: ${_TIQI_COMMON_GITLAB_TOKEN}")
 		endif()
 	endif()
 
 	get_property(propertyValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
-	set(${outputVariable} "PRIVATE-TOKEN: ${propertyValue}" PARENT_SCOPE)
+	set(${outputVariable} ${propertyValue} PARENT_SCOPE)
 endfunction()
 
 # Assemble Gitlab artifact download URL through methods described in

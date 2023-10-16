@@ -208,7 +208,9 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 	if(NOT alreadyDefined)
 
 		if(DEFINED ENV{CI_JOB_TOKEN})
-			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
+			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
+   					BRIEF_DOCS "Gitlab authentication header"
+					FULL_DOCS "Gitlab authentication header using the CI job token")
 			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" "JOB-TOKEN: $ENV{CI_JOB_TOKEN}")
 		else()
 			set(gitlabHost ${ARG_GITLAB_HOST})
@@ -240,7 +242,9 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 				endif()
 			endif()
 
-			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
+			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
+  					BRIEF_DOCS "Gitlab authentication header"
+					FULL_DOCS "Gitlab authentication header using a generated private token")
 			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" "PRIVATE-TOKEN: ${_TIQI_COMMON_GITLAB_TOKEN}")
 		endif()
 	endif()

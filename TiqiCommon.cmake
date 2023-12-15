@@ -171,7 +171,7 @@ This complete example shows how to download an artifact archive with embedded Ma
 # intended for use by TiqiCommon_GitlabArtifactURL() only.
 #
 # Use to encode URL parts to support special characters in Gitlab
-# api paths.
+# api paths
 # Source: https://gitlab.kitware.com/cmake/cmake/-/issues/21274
 function(__TiqiCommon_EncodeURI inputString outputVariable)
 	string(HEX ${inputString} hex)
@@ -188,13 +188,52 @@ function(__TiqiCommon_EncodeURI inputString outputVariable)
 	set(${outputVariable} ${result} PARENT_SCOPE)
 endfunction()
 
-#=======================================================================
-# Gitlab Helper Functions
-#=======================================================================
+# Use to encode strings in base64 (RFC 4648), mainly used for http
+# basic auth
+function(__TiqiCommon_EncodeBase64 inputString outputVariable)
+	set(base64_alphabet "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
 
-# Obtain Gitlab private token through CI variable or SSH and make full
-# HTTPS authentication header available as specified variable
-function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
+	string(HEX ${inputString} input_hex)
+
+	string(LENGTH ${input_hex} input_hex_length)
+	math(EXPR padding_bytes "(3 - (${input_hex_length} / 2) % 3) % 3")
+	if(padding_bytes EQUAL 1)
+		string(APPEND input_hex "00")
+	elseif(padding_bytes EQUAL 2)
+		string(APPEND input_hex "0000")
+	endif()
+
+	set(encoded_string "")
+
+	string(LENGTH ${input_hex} input_hex_length)
+	foreach(i RANGE 0 ${input_hex_length} 6)
+		string(SUBSTRING ${input_hex} ${i} 6 group)
+
+		if(NOT group STREQUAL "")
+			foreach(j RANGE 0 3)
+				math(EXPR symbol "(0x${group} >> 6*(3-${j})) & 0x3f")
+				string(SUBSTRING ${base64_alphabet} ${symbol} 1 symbol_encoded)
+				string(APPEND encoded_string ${symbol_encoded})
+			endforeach()
+		endif()
+	endforeach()
+
+	string(LENGTH ${encoded_string} encoded_string_length)
+	math(EXPR valid_characters "${encoded_string_length} - ${padding_bytes}")
+	string(SUBSTRING ${encoded_string} 0 ${valid_characters} encoded_string)
+
+	if(padding_bytes EQUAL 1)
+		string(APPEND encoded_string "=")
+	elseif(padding_bytes EQUAL 2)
+		string(APPEND encoded_string "==")
+	endif()
+
+	set(${outputVariable} "${encoded_string}" PARENT_SCOPE)
+endfunction()
+
+# Obtain Gitlab private token through CI variable or SSH and make it
+# available as a property
+function(__TiqiCommon_ObtainAuthenticationToken)
 	set(oneValueArgs
 		GITLAB_HOST
 	)
@@ -209,9 +248,13 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 
 		if(DEFINED ENV{CI_JOB_TOKEN})
 			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
-   					BRIEF_DOCS "Gitlab authentication header"
-					FULL_DOCS "Gitlab authentication header using the CI job token")
-			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" "JOB-TOKEN: $ENV{CI_JOB_TOKEN}")
+   					BRIEF_DOCS "Gitlab authentication token"
+					FULL_DOCS "Gitlab authentication token using the CI job token")
+			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix"
+   					BRIEF_DOCS "Gitlab authentication token prefix"
+					FULL_DOCS "Prefix for the full Gitlab authenitcation header")
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" $ENV{CI_JOB_TOKEN})
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix" "JOB-TOKEN")
 		else()
 			set(gitlabHost ${ARG_GITLAB_HOST})
 
@@ -243,14 +286,41 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 			endif()
 
 			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
-  					BRIEF_DOCS "Gitlab authentication header"
-					FULL_DOCS "Gitlab authentication header using a generated private token")
-			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" "PRIVATE-TOKEN: ${_TIQI_COMMON_GITLAB_TOKEN}")
+   					BRIEF_DOCS "Gitlab authentication token"
+					FULL_DOCS "Gitlab authentication token using a generated private token")
+			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix"
+   					BRIEF_DOCS "Gitlab authentication token prefix"
+					FULL_DOCS "Prefix for the full Gitlab authenitcation header")
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" ${_TIQI_COMMON_GITLAB_TOKEN})
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix" "PRIVATE-TOKEN")
 		endif()
 	endif()
+endfunction()
 
-	get_property(propertyValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
-	set(${outputVariable} ${propertyValue} PARENT_SCOPE)
+#=======================================================================
+# Gitlab Helper Functions
+#=======================================================================
+
+# Obtain Gitlab private token through CI variable or SSH and make full
+# git authentication configuration
+function(TiqiCommon_GitAuthenticationConfig outputVariable)
+	__TiqiCommon_ObtainAuthenticationToken(${ARGV})
+
+	get_property(tokenValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
+	__TiqiCommon_EncodeBase64("git:${tokenValue}" basic_auth)
+
+	set(${outputVariable} "http.extraheader=AUTHORIZATION: Basic ${basic_auth}" PARENT_SCOPE)
+endfunction()
+
+# Obtain Gitlab private token through CI variable or SSH and make full
+# HTTPS authentication header available as specified variable
+function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
+	__TiqiCommon_ObtainAuthenticationToken(${ARGV})
+
+	get_property(tokenValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
+	get_property(prefixValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix")
+
+	set(${outputVariable} "${prefixValue}: ${tokenValue}" PARENT_SCOPE)
 endfunction()
 
 # Assemble Gitlab artifact download URL through methods described in

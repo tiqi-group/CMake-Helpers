@@ -36,6 +36,26 @@ The following shows a typical example of obtaining a GitLab authentication heade
 Commands
 ^^^^^^^^
 
+.. command:: TiqiCommon_GitAuthenticationConfig
+
+  .. code-block:: cmake
+
+    TiqiCommon_GitAuthenticationConfig(
+      <variable_name>
+      [GITLAB_HOST <gitlabHostname>]
+    )
+
+  Creates a GIT config key-value pair for a HTTPS basic auth header using either a CI job token or by obtaining a GitLab private token through SSH. The config key-value pair is suitable to be passed to git with the -c/--config flag.
+
+  .. note:: SSH access to the Gitlab instance must be configured on the system for the token generation to work.
+  
+  The function has the optional argument ``GITLAB_HOST`` to specify a Gitlab host different from the default ``gitlab.phys.ethz.ch``.
+
+  The command is designed to provide various ways of token caching to avoid generating unnecessary tokens:
+  * Token fetching is only done for the first call of the function, successive calls will return a global variable.
+  * During the initial configuration step (and if the CI job token variable is not defined), a new token with minimal lifetime is generated through SSH. The token is stored in the CMake cache.
+  * Function calls in successive configuration steps (if you make changes to the CMake lists and re-run make/ninja) try to get the token from the CMake cache. The restored token is tested for validity by means of a trial API read. If the token is found to be invalid, a new token is generated through SSH.
+
 .. command:: TiqiCommon_GitlabAuthenticationHeader
 
   .. code-block:: cmake
@@ -161,6 +181,18 @@ This complete example shows how to download an artifact archive with embedded Ma
   # define main executable and link my_library
   add_executable(${PROJECT_NAME} main.cpp)
   target_link_libraries(${PROJECT_NAME} my_library)
+
+  # add another projects git repository directly
+  TiqiCommon_GitAuthenticationConfig(auth_config)
+  FetchContent_Declare(
+    my_other_sources
+    GIT_REPOSITORY https://gitlab.mycompany.org/my_other_sources.git
+    GIT_TAG main
+    GIT_CONFIG ${auth_config}
+  )
+  FetchContent_MakeAvailable(my_sources)
+
+  # work with my_other_sources the same way as you would with my_sources
 #]=======================================================================]
 
 #=======================================================================

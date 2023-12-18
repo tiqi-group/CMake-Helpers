@@ -36,6 +36,26 @@ The following shows a typical example of obtaining a GitLab authentication heade
 Commands
 ^^^^^^^^
 
+.. command:: TiqiCommon_GitAuthenticationConfig
+
+  .. code-block:: cmake
+
+    TiqiCommon_GitAuthenticationConfig(
+      <variable_name>
+      [GITLAB_HOST <gitlabHostname>]
+    )
+
+  Creates a GIT config key-value pair for a HTTPS basic auth header using either a CI job token or by obtaining a GitLab private token through SSH. The config key-value pair is suitable to be passed to git with the -c/--config flag.
+
+  .. note:: SSH access to the Gitlab instance must be configured on the system for the token generation to work.
+  
+  The function has the optional argument ``GITLAB_HOST`` to specify a Gitlab host different from the default ``gitlab.phys.ethz.ch``.
+
+  The command is designed to provide various ways of token caching to avoid generating unnecessary tokens:
+  * Token fetching is only done for the first call of the function, successive calls will return a global variable.
+  * During the initial configuration step (and if the CI job token variable is not defined), a new token with minimal lifetime is generated through SSH. The token is stored in the CMake cache.
+  * Function calls in successive configuration steps (if you make changes to the CMake lists and re-run make/ninja) try to get the token from the CMake cache. The restored token is tested for validity by means of a trial API read. If the token is found to be invalid, a new token is generated through SSH.
+
 .. command:: TiqiCommon_GitlabAuthenticationHeader
 
   .. code-block:: cmake
@@ -161,6 +181,18 @@ This complete example shows how to download an artifact archive with embedded Ma
   # define main executable and link my_library
   add_executable(${PROJECT_NAME} main.cpp)
   target_link_libraries(${PROJECT_NAME} my_library)
+
+  # add another projects git repository directly
+  TiqiCommon_GitAuthenticationConfig(auth_config)
+  FetchContent_Declare(
+    my_other_sources
+    GIT_REPOSITORY https://gitlab.mycompany.org/my_other_sources.git
+    GIT_TAG main
+    GIT_CONFIG ${auth_config}
+  )
+  FetchContent_MakeAvailable(my_sources)
+
+  # work with my_other_sources the same way as you would with my_sources
 #]=======================================================================]
 
 #=======================================================================
@@ -171,7 +203,7 @@ This complete example shows how to download an artifact archive with embedded Ma
 # intended for use by TiqiCommon_GitlabArtifactURL() only.
 #
 # Use to encode URL parts to support special characters in Gitlab
-# api paths.
+# api paths
 # Source: https://gitlab.kitware.com/cmake/cmake/-/issues/21274
 function(__TiqiCommon_EncodeURI inputString outputVariable)
 	string(HEX ${inputString} hex)
@@ -188,13 +220,52 @@ function(__TiqiCommon_EncodeURI inputString outputVariable)
 	set(${outputVariable} ${result} PARENT_SCOPE)
 endfunction()
 
-#=======================================================================
-# Gitlab Helper Functions
-#=======================================================================
+# Use to encode strings in base64 (RFC 4648), mainly used for http
+# basic auth
+function(__TiqiCommon_EncodeBase64 inputString outputVariable)
+	set(base64_alphabet "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/")
 
-# Obtain Gitlab private token through CI variable or SSH and make full
-# HTTPS authentication header available as specified variable
-function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
+	string(HEX ${inputString} input_hex)
+
+	string(LENGTH ${input_hex} input_hex_length)
+	math(EXPR padding_bytes "(3 - (${input_hex_length} / 2) % 3) % 3")
+	if(padding_bytes EQUAL 1)
+		string(APPEND input_hex "00")
+	elseif(padding_bytes EQUAL 2)
+		string(APPEND input_hex "0000")
+	endif()
+
+	set(encoded_string "")
+
+	string(LENGTH ${input_hex} input_hex_length)
+	foreach(i RANGE 0 ${input_hex_length} 6)
+		string(SUBSTRING ${input_hex} ${i} 6 group)
+
+		if(NOT group STREQUAL "")
+			foreach(j RANGE 0 3)
+				math(EXPR symbol "(0x${group} >> 6*(3-${j})) & 0x3f")
+				string(SUBSTRING ${base64_alphabet} ${symbol} 1 symbol_encoded)
+				string(APPEND encoded_string ${symbol_encoded})
+			endforeach()
+		endif()
+	endforeach()
+
+	string(LENGTH ${encoded_string} encoded_string_length)
+	math(EXPR valid_characters "${encoded_string_length} - ${padding_bytes}")
+	string(SUBSTRING ${encoded_string} 0 ${valid_characters} encoded_string)
+
+	if(padding_bytes EQUAL 1)
+		string(APPEND encoded_string "=")
+	elseif(padding_bytes EQUAL 2)
+		string(APPEND encoded_string "==")
+	endif()
+
+	set(${outputVariable} "${encoded_string}" PARENT_SCOPE)
+endfunction()
+
+# Obtain Gitlab private token through CI variable or SSH and make it
+# available as a property
+function(__TiqiCommon_ObtainAuthenticationToken)
 	set(oneValueArgs
 		GITLAB_HOST
 	)
@@ -206,12 +277,14 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 
 	get_property(alreadyDefined GLOBAL PROPERTY "__TiqiCommon_gitlab_token" DEFINED)
 	if(NOT alreadyDefined)
+		define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
+				BRIEF_DOCS "Gitlab authentication token")
+		define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type"
+				BRIEF_DOCS "Gitlab authentication token type")
 
 		if(DEFINED ENV{CI_JOB_TOKEN})
-			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
-   					BRIEF_DOCS "Gitlab authentication header"
-					FULL_DOCS "Gitlab authentication header using the CI job token")
-			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" "JOB-TOKEN: $ENV{CI_JOB_TOKEN}")
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" $ENV{CI_JOB_TOKEN})
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type" "ci")
 		else()
 			set(gitlabHost ${ARG_GITLAB_HOST})
 
@@ -242,15 +315,46 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 				endif()
 			endif()
 
-			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
-  					BRIEF_DOCS "Gitlab authentication header"
-					FULL_DOCS "Gitlab authentication header using a generated private token")
-			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" "PRIVATE-TOKEN: ${_TIQI_COMMON_GITLAB_TOKEN}")
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" ${_TIQI_COMMON_GITLAB_TOKEN})
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type" "private")
 		endif()
 	endif()
+endfunction()
 
-	get_property(propertyValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
-	set(${outputVariable} ${propertyValue} PARENT_SCOPE)
+#=======================================================================
+# Gitlab Helper Functions
+#=======================================================================
+
+# Obtain Gitlab private token through CI variable or SSH and make full
+# git authentication configuration
+function(TiqiCommon_GitAuthenticationConfig outputVariable)
+	__TiqiCommon_ObtainAuthenticationToken(${ARGV})
+
+	get_property(tokenValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
+	get_property(tokenType GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type")
+
+	if(tokenType STREQUAL "ci")
+		__TiqiCommon_EncodeBase64("gitlab-ci-token:${tokenValue}" basic_auth)
+	elseif(tokenType STREQUAL "private")
+		__TiqiCommon_EncodeBase64("git:${tokenValue}" basic_auth)
+	endif()
+
+	set(${outputVariable} "http.extraheader=AUTHORIZATION: Basic ${basic_auth}" PARENT_SCOPE)
+endfunction()
+
+# Obtain Gitlab private token through CI variable or SSH and make full
+# HTTPS authentication header available as specified variable
+function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
+	__TiqiCommon_ObtainAuthenticationToken(${ARGV})
+
+	get_property(tokenValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
+	get_property(tokenType GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type")
+
+	if(tokenType STREQUAL "ci")
+		set(${outputVariable} "JOB-TOKEN: ${tokenValue}" PARENT_SCOPE)
+	elseif(tokenType STREQUAL "private")
+		set(${outputVariable} "PRIVATE-TOKEN: ${tokenValue}" PARENT_SCOPE)
+	endif()
 endfunction()
 
 # Assemble Gitlab artifact download URL through methods described in

@@ -245,16 +245,14 @@ function(__TiqiCommon_ObtainAuthenticationToken)
 
 	get_property(alreadyDefined GLOBAL PROPERTY "__TiqiCommon_gitlab_token" DEFINED)
 	if(NOT alreadyDefined)
+		define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
+				BRIEF_DOCS "Gitlab authentication token")
+		define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type"
+				BRIEF_DOCS "Gitlab authentication token type")
 
 		if(DEFINED ENV{CI_JOB_TOKEN})
-			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
-   					BRIEF_DOCS "Gitlab authentication token"
-					FULL_DOCS "Gitlab authentication token using the CI job token")
-			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix"
-   					BRIEF_DOCS "Gitlab authentication token prefix"
-					FULL_DOCS "Prefix for the full Gitlab authenitcation header")
 			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" $ENV{CI_JOB_TOKEN})
-			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix" "JOB-TOKEN")
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type" "ci")
 		else()
 			set(gitlabHost ${ARG_GITLAB_HOST})
 
@@ -285,14 +283,8 @@ function(__TiqiCommon_ObtainAuthenticationToken)
 				endif()
 			endif()
 
-			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
-   					BRIEF_DOCS "Gitlab authentication token"
-					FULL_DOCS "Gitlab authentication token using a generated private token")
-			define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix"
-   					BRIEF_DOCS "Gitlab authentication token prefix"
-					FULL_DOCS "Prefix for the full Gitlab authenitcation header")
 			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" ${_TIQI_COMMON_GITLAB_TOKEN})
-			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix" "PRIVATE-TOKEN")
+			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type" "private")
 		endif()
 	endif()
 endfunction()
@@ -307,7 +299,13 @@ function(TiqiCommon_GitAuthenticationConfig outputVariable)
 	__TiqiCommon_ObtainAuthenticationToken(${ARGV})
 
 	get_property(tokenValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
-	__TiqiCommon_EncodeBase64("git:${tokenValue}" basic_auth)
+	get_property(tokenType GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type")
+
+	if(tokenType STREQUAL "ci")
+		__TiqiCommon_EncodeBase64("git:${tokenValue}" basic_auth)
+	elseif(tokenType STREQUAL "private")
+		__TiqiCommon_EncodeBase64("gitlab-ci-token:${tokenValue}" basic_auth)
+	endif()
 
 	set(${outputVariable} "http.extraheader=AUTHORIZATION: Basic ${basic_auth}" PARENT_SCOPE)
 endfunction()
@@ -318,9 +316,13 @@ function(TiqiCommon_GitlabAuthenticationHeader outputVariable)
 	__TiqiCommon_ObtainAuthenticationToken(${ARGV})
 
 	get_property(tokenValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token")
-	get_property(prefixValue GLOBAL PROPERTY "__TiqiCommon_gitlab_token_prefix")
+	get_property(tokenType GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type")
 
-	set(${outputVariable} "${prefixValue}: ${tokenValue}" PARENT_SCOPE)
+	if(tokenType STREQUAL "ci")
+		set(${outputVariable} "JOB-TOKEN: ${tokenValue}" PARENT_SCOPE)
+	elseif(tokenType STREQUAL "private")
+		set(${outputVariable} "PRIVATE-TOKEN: ${tokenValue}" PARENT_SCOPE)
+	endif()
 endfunction()
 
 # Assemble Gitlab artifact download URL through methods described in

@@ -303,6 +303,7 @@ function(TiqiCommon_GitAuthenticationConfig outputVariable)
 
 	if(tokenType STREQUAL "ci")
 		__TiqiCommon_EncodeBase64("git:${tokenValue}" basic_auth)
+		message("using git:${tokenValue}")
 	elseif(tokenType STREQUAL "private")
 		__TiqiCommon_EncodeBase64("gitlab-ci-token:${tokenValue}" basic_auth)
 	endif()

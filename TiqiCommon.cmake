@@ -302,10 +302,9 @@ function(TiqiCommon_GitAuthenticationConfig outputVariable)
 	get_property(tokenType GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type")
 
 	if(tokenType STREQUAL "ci")
-		__TiqiCommon_EncodeBase64("git:${tokenValue}" basic_auth)
-		message("using git:${tokenValue}")
-	elseif(tokenType STREQUAL "private")
 		__TiqiCommon_EncodeBase64("gitlab-ci-token:${tokenValue}" basic_auth)
+	elseif(tokenType STREQUAL "private")
+		__TiqiCommon_EncodeBase64("git:${tokenValue}" basic_auth)
 	endif()
 
 	set(${outputVariable} "http.extraheader=AUTHORIZATION: Basic ${basic_auth}" PARENT_SCOPE)

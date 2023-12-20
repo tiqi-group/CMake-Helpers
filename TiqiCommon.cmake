@@ -278,9 +278,11 @@ function(__TiqiCommon_ObtainAuthenticationToken)
 	get_property(alreadyDefined GLOBAL PROPERTY "__TiqiCommon_gitlab_token" DEFINED)
 	if(NOT alreadyDefined)
 		define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token"
-				BRIEF_DOCS "Gitlab authentication token")
+				BRIEF_DOCS "Gitlab authentication token"
+    				FULL_DOCS "Gitlab authentication token used to authenticate with the Gitlab server")
 		define_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token_type"
-				BRIEF_DOCS "Gitlab authentication token type")
+				BRIEF_DOCS "Gitlab authentication token type"
+    				FULL_DOCS "Type of the gitlab authentication token used to authenticate with the Gitlab server. ")
 
 		if(DEFINED ENV{CI_JOB_TOKEN})
 			set_property(GLOBAL PROPERTY "__TiqiCommon_gitlab_token" $ENV{CI_JOB_TOKEN})

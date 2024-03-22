@@ -418,7 +418,7 @@ function(TiqiCommon_ParseLiteral outputVariable input)
 		set(i 0)
 		while(${i} LESS ${bits})
 			if ("${binaryNumber}" MATCHES "^1")
-				math(EXPR number "${number} + (1 << ${bits}-1-i)")
+				math(EXPR number "${number} + (1 << ${bits}-1-${i})")
 			endif()
 
 			string(SUBSTRING "${binaryNumber}" 1 -1 binaryNumber)

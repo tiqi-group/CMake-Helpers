@@ -1,0 +1,1 @@
+.. cmake-module:: ../TiqiCommon.cmake

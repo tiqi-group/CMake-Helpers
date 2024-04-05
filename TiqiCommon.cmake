@@ -36,7 +36,7 @@ The following shows a typical example of obtaining a GitLab authentication heade
 Commands
 ^^^^^^^^
 
-.. command:: TiqiCommon_GitAuthenticationConfig
+.. cmake:command:: TiqiCommon_GitAuthenticationConfig
 
   .. code-block:: cmake
 
@@ -48,7 +48,7 @@ Commands
   Creates a GIT config key-value pair for a HTTPS basic auth header using either a CI job token or by obtaining a GitLab private token through SSH. The config key-value pair is suitable to be passed to git with the -c/--config flag.
 
   .. note:: SSH access to the Gitlab instance must be configured on the system for the token generation to work.
-  
+
   The function has the optional argument ``GITLAB_HOST`` to specify a Gitlab host different from the default ``gitlab.phys.ethz.ch``.
 
   The command is designed to provide various ways of token caching to avoid generating unnecessary tokens:
@@ -56,7 +56,7 @@ Commands
   * During the initial configuration step (and if the CI job token variable is not defined), a new token with minimal lifetime is generated through SSH. The token is stored in the CMake cache.
   * Function calls in successive configuration steps (if you make changes to the CMake lists and re-run make/ninja) try to get the token from the CMake cache. The restored token is tested for validity by means of a trial API read. If the token is found to be invalid, a new token is generated through SSH.
 
-.. command:: TiqiCommon_GitlabAuthenticationHeader
+.. cmake:command:: TiqiCommon_GitlabAuthenticationHeader
 
   .. code-block:: cmake
 
@@ -68,7 +68,7 @@ Commands
   Creates a full HTTPS authentication header using either a CI job token or by obtaining a GitLab private token through SSH. The authentication header is stored in the target variable called ``<variable_name>`` within the calling scope.
 
   .. note:: SSH access to the Gitlab instance must be configured on the system for the token generation to work.
-  
+
   The function has the optional argument ``GITLAB_HOST`` to specify a Gitlab host different from the default ``gitlab.phys.ethz.ch``.
 
   The command is designed to provide various ways of token caching to avoid generating unnecessary tokens:
@@ -76,7 +76,7 @@ Commands
   * During the initial configuration step (and if the CI job token variable is not defined), a new token with minimal lifetime is generated through SSH. The token is stored in the CMake cache.
   * Function calls in successive configuration steps (if you make changes to the CMake lists and re-run make/ninja) try to get the token from the CMake cache. The restored token is tested for validity by means of a trial API read. If the token is found to be invalid, a new token is generated through SSH.
 
-.. command:: TiqiCommon_GitlabArtifactURL
+.. cmake:command:: TiqiCommon_GitlabArtifactURL
 
   .. code-block:: cmake
 
@@ -118,8 +118,21 @@ Commands
 
   ``GIT_REF``
     The name of the branch or tag, for which the latest successful run should be selected.
-    
+
   .. note:: The two download methods and the corresponding arguments are mutually exclusive.
+
+.. cmake:command:: TiqiCommon_ParseLiteral
+
+  .. code-block:: cmake
+
+    TiqiCommon_ParseLiteral(
+      <output_variable_name>
+      <input_literal>
+    )
+
+  Turns ``<input_literal>`` of the form ``0b[01]+``, ``0x[0-9a-fA-F]+`` or ``[0-9]+`` into the decimal representation of the form ``[0-9]+``.
+  Sets ``<output_variable_name>`` withing the calling scope.
+
 
 Examples
 ^^^^^^^^
@@ -129,12 +142,13 @@ Library Sources with Linking
 
 This complete example shows how to download an artifact archive with embedded Makefile, how to build the contained library and link it to an executable. The artifact is downloaded for the project with ID 1786 and the CI job with ID 26500.
 
-.. note:: The use of both the :module:`FetchContent` and :module:`ExternalProject` modules in this example is intended: As the GitLab authentication token might only be available during the configuration stage (might expire afterwards), it is recommended to download the library sources during the configuration stage.
+.. note:: The use of both the :cmake:module:`FetchContent` and :cmake:module:`ExternalProject` modules in this example is intended: As the GitLab authentication token might only be available during the configuration stage (might expire afterwards), it is recommended to download the library sources during the configuration stage.
 
 .. code-block:: cmake
+
   include(FetchContent)
   include(ExternalProject)
-  
+
   # download and include TiqiCommon module
   FetchContent_Declare(
     tiqi_common
@@ -143,7 +157,7 @@ This complete example shows how to download an artifact archive with embedded Ma
   )
   FetchContent_MakeAvailable(tiqi_common)
   include(${tiqi_common_SOURCE_DIR}/TiqiCommon.cmake)
-  
+
   # prepare authentication header and artifact download URL
   TiqiCommon_GitlabAuthenticationHeader(auth_header)
   TiqiCommon_GitlabArtifactURL(artifact_fetch_url
@@ -151,7 +165,7 @@ This complete example shows how to download an artifact archive with embedded Ma
     CI_JOB_ID 26500
     ARTIFACT_PATHNAME build/bsp.tar.gz
   )
-  
+
   # download source archive including Makefile
   FetchContent_Declare(
     my_sources
@@ -159,7 +173,7 @@ This complete example shows how to download an artifact archive with embedded Ma
     HTTP_HEADER ${auth_header}
   )
   FetchContent_MakeAvailable(my_sources)
-  
+
   # define external project to build libraries
   ExternalProject_Add(my_library_external
           SOURCE_DIR ${my_sources_SOURCE_DIR}
@@ -169,7 +183,7 @@ This complete example shows how to download an artifact archive with embedded Ma
           INSTALL_COMMAND ""
           BUILD_BYPRODUCTS <SOURCE_DIR>/lib/my_lib.a
   )
-  
+
   # define library as cmake interface target
   add_library(my_library INTERFACE)
   add_dependencies(my_library my_library_external)
@@ -177,7 +191,7 @@ This complete example shows how to download an artifact archive with embedded Ma
   target_include_directories(my_library INTERFACE ${SOURCE_DIR}/include)
   target_link_directories(my_library INTERFACE ${SOURCE_DIR}/lib)
   target_link_libraries(my_library INTERFACE-lmy_lib)
-  
+
   # define main executable and link my_library
   add_executable(${PROJECT_NAME} main.cpp)
   target_link_libraries(${PROJECT_NAME} my_library)
@@ -410,3 +424,46 @@ function(TiqiCommon_GitlabArtifactURL outputVariable gitlabProject)
 	set(${outputVariable} "https://${ARG_GITLAB_HOST}/api/v4/${downloadURI}" PARENT_SCOPE)
 endfunction()
 
+#=======================================================================
+# General Helper Functions
+#=======================================================================
+
+# Take an input string in binary, hexadecimal or decimal format and convert it to decimal
+function(TiqiCommon_ParseLiteral outputVariable input)
+	if("${input}" MATCHES "^0b")
+		string(SUBSTRING "${input}" 2 -1 binaryNumber)
+		if (NOT "${binaryNumber}" MATCHES "^[01]+$")
+			message(FATAL_ERROR "${input} is not a valid binary literal")
+		endif()
+		string(LENGTH "${binaryNumber}" bits)
+		set(number 0)
+		set(i 0)
+		while(${i} LESS ${bits})
+			if ("${binaryNumber}" MATCHES "^1")
+				math(EXPR number "${number} + (1 << ${bits}-1-${i})")
+			endif()
+			if ("${binaryNumber}" MATCHES "^[01]$")
+				break()
+			endif()
+
+			string(SUBSTRING "${binaryNumber}" 1 -1 binaryNumber)
+			math(EXPR i "${i} + 1")
+		endwhile()
+	else()
+		if ("${input}" MATCHES "^0x")
+			if (NOT "${input}" MATCHES "^0x[0-9a-fA-F]+$")
+				message(FATAL_ERROR "${input} is not a valid hexadecimal literal")
+			endif()
+		else()
+			if (NOT "${input}" MATCHES "^[0-9]+$")
+				message(FATAL_ERROR "${input} is not a valid decimal number")
+			endif()
+
+		endif()
+		math(EXPR number "${input}")
+	endif()
+	if(${number} STREQUAL "ERROR")
+		message(FATAL_ERROR "Could not parse ${input}")
+	endif()
+	set(${outputVariable} "${number}" PARENT_SCOPE)
+endfunction()

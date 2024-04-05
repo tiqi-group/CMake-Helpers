@@ -1,0 +1,6 @@
+_build
+.*
+!.gitignore
+!.github
+!.gitmodules
+!.gitkeep

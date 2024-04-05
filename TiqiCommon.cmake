@@ -36,7 +36,7 @@ The following shows a typical example of obtaining a GitLab authentication heade
 Commands
 ^^^^^^^^
 
-.. command:: TiqiCommon_GitAuthenticationConfig
+.. cmake:command:: TiqiCommon_GitAuthenticationConfig
 
   .. code-block:: cmake
 
@@ -56,7 +56,7 @@ Commands
   * During the initial configuration step (and if the CI job token variable is not defined), a new token with minimal lifetime is generated through SSH. The token is stored in the CMake cache.
   * Function calls in successive configuration steps (if you make changes to the CMake lists and re-run make/ninja) try to get the token from the CMake cache. The restored token is tested for validity by means of a trial API read. If the token is found to be invalid, a new token is generated through SSH.
 
-.. command:: TiqiCommon_GitlabAuthenticationHeader
+.. cmake:command:: TiqiCommon_GitlabAuthenticationHeader
 
   .. code-block:: cmake
 
@@ -76,7 +76,7 @@ Commands
   * During the initial configuration step (and if the CI job token variable is not defined), a new token with minimal lifetime is generated through SSH. The token is stored in the CMake cache.
   * Function calls in successive configuration steps (if you make changes to the CMake lists and re-run make/ninja) try to get the token from the CMake cache. The restored token is tested for validity by means of a trial API read. If the token is found to be invalid, a new token is generated through SSH.
 
-.. command:: TiqiCommon_GitlabArtifactURL
+.. cmake:command:: TiqiCommon_GitlabArtifactURL
 
   .. code-block:: cmake
 
@@ -121,7 +121,7 @@ Commands
 
   .. note:: The two download methods and the corresponding arguments are mutually exclusive.
 
-.. command:: TiqiCommon_ParseLiteral
+.. cmake:command:: TiqiCommon_ParseLiteral
 
   .. code-block:: cmake
 
@@ -142,9 +142,10 @@ Library Sources with Linking
 
 This complete example shows how to download an artifact archive with embedded Makefile, how to build the contained library and link it to an executable. The artifact is downloaded for the project with ID 1786 and the CI job with ID 26500.
 
-.. note:: The use of both the :module:`FetchContent` and :module:`ExternalProject` modules in this example is intended: As the GitLab authentication token might only be available during the configuration stage (might expire afterwards), it is recommended to download the library sources during the configuration stage.
+.. note:: The use of both the :cmake:module:`FetchContent` and :cmake:module:`ExternalProject` modules in this example is intended: As the GitLab authentication token might only be available during the configuration stage (might expire afterwards), it is recommended to download the library sources during the configuration stage.
 
 .. code-block:: cmake
+
   include(FetchContent)
   include(ExternalProject)
 

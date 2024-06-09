@@ -9,6 +9,10 @@ See embedded module documentation for details about the usage.
 
 ## Documentation
 
+See [Github Pages](https://tiqi-group.github.io/CMake-Helpers).
+
+### Building the Documentation
+
 Sphinx builds the documentation.
 The [sphinxcontrib-moderncmakedomain](https://pypi.org/project/sphinxcontrib-moderncmakedomain/) package is needed.
 It can be installed using pip:

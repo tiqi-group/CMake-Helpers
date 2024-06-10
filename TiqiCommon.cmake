@@ -12,8 +12,6 @@ Overview
 ^^^^^^^^
 
 Provides utility functions to assist in CMake-base workflows for Tiqi projects.
-The current set of supported commands is limited to GitLab utility functions for
-artifact download and authentication handling.
 
 The following shows a typical example of obtaining a GitLab authentication header used for fetching all artifacts for a specific CI job:
 
@@ -31,6 +29,18 @@ The following shows a typical example of obtaining a GitLab authentication heade
     my-project
     URL ${artifact_fetch_url}
     HTTP_HEADER ${auth_header}
+  )
+
+The second example shows how to add a project from an internally hosted GitLab instance with FetchContent. The protocol and authentication method is automatically derived for local or CI jobs:
+
+.. code-block:: cmake
+
+  TiqiCommon_ExternalProjectGitConfig(git_config my-group/my-project.git)
+
+  FetchContent_Declare(
+    my-project
+    ${git_config}
+    GIT_TAG main
   )
 
 Commands
@@ -120,6 +130,33 @@ Commands
     The name of the branch or tag, for which the latest successful run should be selected.
 
   .. note:: The two download methods and the corresponding arguments are mutually exclusive.
+
+.. cmake:command:: TiqiCommon_ExternalProjectGitConfig
+
+  .. code-block:: cmake
+
+    TiqiCommon_ExternalProjectGitConfig(
+      <variable_name>
+      <repository_path>
+      [GITLAB_SSH_URL_PREFIX]
+      [GITLAB_HTTPS_URL_PREFIX]
+    )
+
+  Generates a list of keyword arguments for ``ExternalProject_Add`` or ``FetchContent_Declare``. Depending on the existence of the ``CI_JOB_TOKEN`` environment variable (indicates if the build is performed as a GitLab job), the Git repository is added using either HTTPS (if the ``CI_JOB_TOKEN`` variable exists) or SSH. For HTTPS, the list contains the ``GIT_REPOSITORY`` argument with the Git URL and the ``GIT_CONFIG`` argument with the ``CI_JOB_TOKEN`` as an authentication header (see ``TiqiCommon_GitAuthenticationConfig``). For SSH, only the ``GIT_REPOSITORY`` argument is provided.
+
+  The list is exported in the calling scope as the given variable name and can be passed directly to the ``ExternalProject_Add`` or ``FetchContent_Declare`` command.
+
+  .. note:: The method generates the ``GIT_REPOSITORY`` and ``GIT_CONFIG`` arguments automatically. Do not provide these variables manually as they will cause CMake to fail in the configure stage.
+
+  The first required argument ``<variable_name>`` specifies the target variable name for the keyword argument list in the calling scope. The second required argument ``<repository_path>`` specifies the protocol-agnostic part of the Git repository URL. For ``https://gitlab.phys.ethz.ch/my-group/my-project.git`` or ``git@gitlab.phys.ethz.ch:my-group/my-project.git``, this would be ``my-group/my-project.git``.
+
+  The following optional arguments are accepted:
+
+  ``GITLAB_SSH_URL_PREFIX``
+    The Git URL prefix used to assemble the ``GIT_REPOSITORY`` variable for SSH. Defaults to ``git@gitlab.phys.ethz.ch``.
+
+  ``GITLAB_HTTPS_URL_PREFIX``
+    The Git URL prefix used to assemble the ``GIT_REPOSITORY`` variable for HTTPS. Defaults to ``https://gitlab.phys.ethz.ch``.
 
 .. cmake:command:: TiqiCommon_ParseLiteral
 
@@ -422,6 +459,38 @@ function(TiqiCommon_GitlabArtifactURL outputVariable gitlabProject)
 	endif()
 
 	set(${outputVariable} "https://${ARG_GITLAB_HOST}/api/v4/${downloadURI}" PARENT_SCOPE)
+endfunction()
+
+# Get keyword arguments for ExternalProject_Add and FetchContent_Declare
+# to add a Git repository with the proper protocol and corresponding
+# authentication header
+function(TiqiCommon_ExternalProjectGitConfig outputVariable repositoryPath)
+	set(oneValueArgs
+		GITLAB_SSH_URL_PREFIX
+		GITLAB_HTTPS_URL_PREFIX
+        )
+        cmake_parse_arguments(PARSE_ARGV 1 ARG "" "${oneValueArgs}" "")
+
+	if(NOT GITLAB_SSH_URL_PREFIX)
+		set(GITLAB_SSH_URL_PREFIX "git@gitlab.phys.ethz.ch")
+	endif()
+
+	if(NOT GITLAB_HTTPS_URL_PREFIX)
+		set(GITLAB_HTTPS_URL_PREFIX "https://gitlab.phys.ethz.ch")
+	endif()
+
+	set(args)
+
+	if(DEFINED ENV{CI_JOB_TOKEN})
+		TiqiCommon_GitAuthenticationConfig(auth_config)
+
+		list(APPEND args GIT_REPOSITORY "${GITLAB_HTTPS_URL_PREFIX}/${repositoryPath}")
+		list(APPEND args GIT_CONFIG ${auth_config})
+	else()
+		list(APPEND args GIT_REPOSITORY "${GITLAB_SSH_URL_PREFIX}:${repositoryPath}")
+	endif()
+
+	set(${outputVariable} ${args} PARENT_SCOPE)
 endfunction()
 
 #=======================================================================
